@@ -72,7 +72,7 @@ function start_menu() {
   draw_menu
   # read 1 char (not delimiter), silent
   while IFS= read -sn1 key; do
-    # Check for enter/space
+    # Check for enter
     if [[ "$key" == "" ]]; then break; fi
 
     # catch multi-char special key sequences
