@@ -3,7 +3,7 @@
 HOST=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 MULTISELECT=0
 cur=0
-WORK_DIR=""
+WORK_DIR="" # !!! set it before use
 BASE_DIR=""
 AWS_DIR=""
 GCP_DIR=""
@@ -15,9 +15,15 @@ if [[ "$2" == "-m" ]]; then
   MULTISELECT=1
 fi
 
+function normalize_before_exit() {
+  # set cursor visible, colorls to default && exit
+  tput sgr0 && tput cnorm && exit 1
+}
+
+trap normalize_before_exit SIGINT
+
 function help() {
   tput setaf 3
-  echo "!!! SET WORK_DIR to your project dir before use !!!"
   echo "This script allow to destroy and delete workspace(s) from provided hosting"
   echo "Usage: bash $0 {hosting} (gcp | aws) for single workspace deletion"
   echo " bash $0 {hosting} (gcp | aws) -m for multiple workspace deletion"
@@ -29,7 +35,6 @@ function help() {
   exit 0
 }
 
-# !!! This function might need to be edited before usage
 function defineBaseDirs() {
   if [[ -z "$BASE_DIR" ]]; then
     BASE_DIR="$(find ~ -type d -name '$WORK_DIR' 2>/dev/null &)"
@@ -69,10 +74,11 @@ function clear_menu() {
 }
 
 function start_menu() {
+  tput civis # make cursor invisible
   draw_menu
   # read 1 char (not delimiter), silent
   while IFS= read -sn1 key; do
-    # Check for enter
+    # Check for enter/space
     if [[ "$key" == "" ]]; then break; fi
 
     # catch multi-char special key sequences
@@ -86,6 +92,13 @@ function start_menu() {
     $'\e[A' | $'\e0A' | $'\e[D' | $'\e0D') ((cur > 0)) && ((cur--)) ;;
       # cursor down, right: next item
     $'\e[B' | $'\e0B' | $'\e[C' | $'\e0C') ((cur < ${#ws[@]} - 1)) && ((cur++)) ;;
+    $'m' | $'M')
+      if [[ $MULTISELECT -eq 0 ]]; then
+        MULTISELECT=1
+      elif [[ $MULTISELECT -eq 1 ]]; then
+        MULTISELECT=0
+      fi
+      ;;
     $' ')
     if [[ $MULTISELECT -eq 1 ]]; then
       if ! [[ $(echo "${arrToDelete[@]}" | grep "${ws[cur]}") ]]; then
@@ -104,6 +117,7 @@ function start_menu() {
     clear_menu
     draw_menu
   done
+  tput cnorm # make cursor normal
 }
 
 # actually destroys and deletes workspace
@@ -132,7 +146,7 @@ function deleteFromProwider() {
   start_menu
   # delete workspaces in loop from arrToDelete
   if [[ $MULTISELECT -eq 1 ]] && [[ ${#arrToDelete[@]} -gt 0 ]]; then
-    read -rp "Workspaces $(tput setaf 3) ${arrToDelete[*]} $(tput sgr0) will be deleted. Correct? (y/n): " approve
+    read -rp "Workspaces $(tput bold) $(tput setaf 3) ${arrToDelete[*]} $(tput sgr0) will be deleted. Correct? (y/n): " approve
     if [[ "$(echo "$approve" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
       for workspace in "${arrToDelete[@]}"; do
         deleteWorkspace "$workspace"
@@ -143,7 +157,7 @@ function deleteFromProwider() {
     fi
   else # delete one selected workspace
     local wsToDelete=${ws[$cur]}
-    read -rp "Workspace $(tput setaf 3) $wsToDelete $(tput sgr0) will be deleted. Correct? (y/n): " approve
+    read -rp "Workspace $(tput bold) $(tput setaf 3) $wsToDelete $(tput sgr0) will be deleted. Correct? (y/n): " approve
     if [[ "$(echo "$approve" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
       deleteWorkspace "$wsToDelete"
     else
